@@ -8,33 +8,42 @@ property open_in_new_window : false
 property open_in_new_tab : true
 
 -- Set this property to true if iTerm is configured to launch without opening a new window
-property iterm_opens_quietly : false
+property iterm_opens_quietly : true
 
 -- Handlers
 on new_window()
-  tell application "iTerm" to create window with default profile
+  with timeout of 3 seconds
+    try
+      tell application id "com.googlecode.iterm2" to create window with default profile
+      set r to the result
+    end try
+    if class of r is not item then
+      return false
+    end if
+  end timeout
+  true
 end new_window
 
 on new_tab()
-  tell application "iTerm" to tell the first window to create tab with default profile
+  tell application id "com.googlecode.iterm2" to tell the first window to create tab with default profile
 end new_tab
 
 on call_forward()
-  tell application "iTerm" to activate
+  tell application id "com.googlecode.iterm2" to activate
 end call_forward
 
 on is_running()
-  application "iTerm" is running
+  application id "com.googlecode.iterm2" is running
 end is_running
 
 on is_processing()
-  tell application "iTerm" to tell the first window to tell current session to return is processing
+  tell application id "com.googlecode.iterm2" to tell the first window to tell current session to return is processing
 end is_processing
 
 on has_windows()
   if not is_running() then return false
 
-  tell application "iTerm"
+  tell application id "com.googlecode.iterm2"
     if windows is {} then return false
     if tabs of current window is {} then return false
     if sessions of current tab of current window is {} then return false
@@ -47,7 +56,7 @@ on has_windows()
 end has_windows
 
 on send_text(custom_text)
-  tell application "iTerm" to tell the first window to tell current session to write text custom_text
+  tell application id "com.googlecode.iterm2" to tell the first window to tell current session to write text custom_text
 end send_text
 
 -- Main
@@ -64,30 +73,33 @@ on alfred_script(query)
     -- If iTerm is not running and we tell it to create a new window, we get two:
     -- one from opening the application, and the other from the command
     if is_running() or iterm_opens_quietly then
-      new_window()
+      if not new_window() then
+        -- say "failed"
+        display notification "new_window() failed!" with title "Alfred Terminal error" sound name "Blow"
+        error number -128
+      end if
     else
       call_forward()
     end if
   end if
 
   -- macOS buffers TTY input to 1024 bytes, so if input is larger wait for session to be ready
-  -- "with timeout" does not work with "repeat", so use a delay (0.01 * 500 means a timeout of 5 seconds)
+  -- "with timeout" does not work with "repeat", so use a delay (0.25 * 25 means a timeout of 5 seconds)
   if length of query > 1024
-    repeat 500 times
+    repeat 20 times
       if not is_processing() then exit repeat
-      delay 0.01
+      delay 0.25
     end repeat
   end if
 
   -- Make sure a window exists before we continue, or the write may fail
-  -- "with timeout" does not work with "repeat", so use a delay (0.01 * 500 means a timeout of 5 seconds)
-  repeat 500 times
+  -- "with timeout" does not work with a "repeat"
+  repeat 20 times
     if has_windows() then
       send_text(query)
       call_forward()
       exit repeat
     end if
-
-    delay 0.01
+    delay 0.25
   end repeat
 end alfred_script
